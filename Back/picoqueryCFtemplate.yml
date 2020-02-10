@@ -1,0 +1,241 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Mappings:
+  EnvironmentParameters:
+    dev:
+      Environment: dev
+      LogLevel: 20
+      PicoChannelID: '452019'
+    prod:
+      Environment: prod
+      LogLevel: 20
+      PicoChannelID: '452214'
+    test:
+      Environment: test
+      LogLevel: 10
+      PicoChannelID: '452019'
+  RegionParameters:
+    us-east-1:
+      SubNetIds:
+      - subnet-1aa11111
+      - subnet-222bbbbb
+      - subnet-c33ccccc
+Parameters:
+  apiGatewayStageName:
+    Type: "String"
+    AllowedPattern: "^[a-zA-Z0-9]+$"
+    Default: "test"
+  Environment:
+    AllowedValues:
+    - test
+    - dev
+    - prod
+    Description: Name of the environment
+    Type: String
+
+  CorsOrigin:
+    Type: String
+    Default: "'*'"
+  CorsHeaders:
+    Type: String
+    Default: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+  CorsMethods:
+    Type: String
+    Default: "'OPTIONS,GET'"
+
+Resources:
+  PicoQueryFunction:
+    Properties:
+      CodeUri: fetching_train_info
+      Environment:
+        Variables:
+          log_level:
+            Fn::FindInMap:
+             - EnvironmentParameters
+             - Ref: Environment
+             - LogLevel
+          pico_channel_id:
+             Fn::FindInMap:
+               - EnvironmentParameters
+               - Ref: Environment
+               - PicoChannelID
+          pico_client_cert: client_cert.pem
+          pico_url:
+            Fn::Join:
+             - ''
+             - - https://
+               - sgproxy-
+               - Ref: Environment
+               - '-'
+               - Ref: AWS::Region
+               - .rrrrapi.com
+               - :5432
+          postexe_timeout: '604800'
+          preexe_timeout: '86400'
+      Handler: 'seats_fetcher.get_seats'
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Effect: Allow
+              Resource:
+                - '*'
+          Version: '2012-10-17'
+        - Statement:
+            - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:DescribeLogGroups
+                - logs:DescribeLogStreams
+                - logs:GetLogEvents
+                - logs:PutLogEvents
+                - logs:DeleteLogGroup
+                - logs:DeleteLogStream
+              Effect: Allow
+              Resource:
+                - arn:aws:logs:*:*:*
+          Version: '2012-10-17'
+      Runtime: python3.7
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-44d44444
+        SubnetIds:
+          Fn::FindInMap:
+            - RegionParameters
+            - Ref: AWS::Region
+            - SubNetIds
+    Type: AWS::Serverless::Function
+
+  PicoQueryAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "PicoQueryAPI"
+
+  apiGatewayGetResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      ParentId: !GetAtt "PicoQueryAPI.RootResourceId"
+      RestApiId: !Ref "PicoQueryAPI"
+      PathPart: 'get-availability'
+
+  apiGatewayRootMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      ApiKeyRequired: true
+      HttpMethod: "GET"
+      Integration:
+        Type: "AWS_PROXY"
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PicoQueryFunction.Arn}/invocations"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseTemplates:
+              application/json: $input.json('$')
+            StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: !Ref CorsHeaders
+              method.response.header.Access-Control-Allow-Methods: !Ref CorsMethods
+              method.response.header.Access-Control-Allow-Origin: !Ref CorsOrigin
+        RequestTemplates:
+          application/json: $input.json('$')
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          StatusCode: '200'
+      ResourceId: !Ref "apiGatewayGetResource"
+      RestApiId: !Ref "PicoQueryAPI"
+
+  apiGatewayOptionsMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      ResourceId: !Ref "apiGatewayGetResource"
+      RestApiId: !Ref "PicoQueryAPI"
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: !Ref CorsHeaders
+              method.response.header.Access-Control-Allow-Methods: !Ref CorsMethods
+              method.response.header.Access-Control-Allow-Origin: !Ref CorsOrigin
+            ResponseTemplates:
+              application/json: ''
+            StatusCode: '200'
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+          StatusCode: '200'
+
+  apiGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    DependsOn:
+      - "apiGatewayRootMethod"
+      - "apiGatewayOptionsMethod"
+    Properties:
+      RestApiId: !Ref "PicoQueryAPI"
+      StageName: !Ref "apiGatewayStageName"
+
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    DependsOn:
+      - "PicoQueryAPI"
+      - "PicoQueryFunction"
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt
+        - PicoQueryFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub
+        - "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGatewayPath}/*/*"
+        - apiGatewayPath: !Ref "PicoQueryAPI"
+
+  ApiKey:
+    Type: "AWS::ApiGateway::ApiKey"
+    Properties:
+      Name: getAvailabilityKey2
+      Description: "CloudFormation API Key V1"
+      Enabled: true
+      GenerateDistinctId: false
+
+  ApiGatewayUsagePlan:
+    Type: "AWS::ApiGateway::UsagePlan"
+    DependsOn:
+      - "PicoQueryAPI"
+      - "apiGatewayGetResource"
+      - "apiGatewayDeployment"
+      - "apiGatewayRootMethod"
+    Properties:
+      ApiStages:
+      - ApiId: !Ref "PicoQueryAPI"
+        Stage: !Ref "apiGatewayStageName"
+      Description: !Join [" ", [{"Ref": "AWS::StackName"}, "usage plan"]]
+      Quota:
+        Limit: 2000
+        Period: MONTH
+      Throttle:
+        BurstLimit: 10
+        RateLimit: 10
+      UsagePlanName: "Silver usage-plan2"
+
+  ApiUsagePlanKey:
+    Type: "AWS::ApiGateway::UsagePlanKey"
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref ApiGatewayUsagePlan
+

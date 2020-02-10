@@ -1,0 +1,123 @@
+<div class="card m-3">
+   <h5 class="card-header">Availibility Form</h5>
+   <div class="card-body">
+      <form #myForm="ngForm" (ngSubmit)="onSubmit()" [formGroup]="trainFormGroup">
+
+         <div class="form-row">
+            <!-- Departure Station code-->
+            <div class="form-group col">
+               <mat-form-field style="column-width: 25pc">
+                  <input class="form-control" type="text" placeholder="Enter Departure Station" matInput
+                     [matAutocomplete]="auto" name="departure_Station" formControlName="departure_Station" required />
+                  <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayFn">
+                     <mat-option *ngFor="let departure_Station of departureFilteredStations | async"
+                        [value]="departure_Station">
+                        {{ departure_Station.label }}
+                     </mat-option>
+                  </mat-autocomplete>
+               </mat-form-field>
+            </div>
+            <!-- Arrival Station code-->
+            <div class="form-group col">
+               <mat-form-field style="column-width: 25pc">
+                  <input class="form-control" type="text" placeholder="Enter Arrival Station" matInput
+                     [matAutocomplete]="auto2" name="arrStation" formControlName="arrival_Station" required />
+                  <mat-autocomplete #auto2="matAutocomplete" [displayWith]="displayFn">
+                     <mat-option *ngFor="let option of arrivalFilteredStations | async" [value]="option">
+                        {{ option.label }}
+                     </mat-option>
+                  </mat-autocomplete>
+               </mat-form-field>
+            </div>
+         </div>
+         <hr>
+         <div class="form-row">
+            <div class="form-group col">
+               <!--DEPARTURE DATE-->
+               <mat-form-field style="column-width: 25pc">
+                  <br><br>
+                  <input [matDatepicker]="picker" placeholder="Choose a date" name="departureDate"
+                     formControlName="departureDate" matInput required />
+                  <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+                  <mat-datepicker #picker></mat-datepicker>
+               </mat-form-field>
+            </div>
+            <div class="form-group col">
+               <!--DEPARTURE TIME-->
+               <label>Departure time:</label>
+               <div class="col-sm-6">
+                  <ngb-timepicker [meridian]="meridian" [formControl]="timeControl" required>
+                  </ngb-timepicker>
+               </div>
+               <div class="small form-text text-danger" *ngIf="!timeControl.valid">
+                  <div *ngIf="timeControl.errors['required']">Select time</div>
+               </div>
+            </div>
+         </div>
+         <hr>
+         <!-- Train Number -->
+         <div class="form-row">
+            <div class="form-group col">
+               <mat-form-field style="column-width: 25pc">
+                  <br><br>
+                  <input matInput placeholder="Enter Train Number" name="train_Number" formControlName="train_Number"
+                     required>
+               </mat-form-field>
+            </div>
+         </div>
+         <!-- Submit or Reset buttons -->
+         <!-- <div class="other-container">  -->
+         <button type="submit" type="submit">Submit</button>
+         <button mat-button type="reset" value="Reset" (click)="reset()">Reset</button>
+         <!-- </div> -->
+      </form>
+   </div>
+</div>
+
+
+<!-- <app-loading-overlay *ngIf="showLoading" overlay="true">
+</app-loading-overlay> -->
+<!-- <mat-spinner *ngIf="showLoading"></mat-spinner> -->
+
+<div *ngIf="errorPopUp" >
+            <!-- Space will be used to display error message - to be changed to Popup -->
+      {{popUpDialog}}
+</div>
+
+<div *ngIf="seatsAvailabilityResponse.length" >
+      <div class="card m-3" >
+            <h5 class="card-header">Leaving From <b>{{ trainFormGroup.get('departure_Station').value.label }}</b> to <b>{{ trainFormGroup.get('arrival_Station').value.label }}</b> <br>
+               
+            </h5>
+            <h6 class="card-header">On ---> <b>{{ trainFormGroup.get('departureDate').value.toLocaleString('en-029') | date }}</b> at <b>{{ trainFormGroup.get('departureTime').value.hour }}:{{ trainFormGroup.get('departureTime').value.minute | number: '2.0-0' }}</b></h6>
+   <table mat-table [dataSource]="seatsAvailabilityResponse" class="mat-elevation-z8" multiTemplateDataRows>
+      
+      <ng-container matColumnDef="offerCode">
+         <th mat-header-cell *matHeaderCellDef> Offer Code </th>
+         <td mat-cell *matCellDef="let element; let i = dataIndex"  
+         [style.display]="getRowSpan('Offer Code', i)"
+         [attr.rowspan]="getRowSpan('Offer Code', i)"> 
+               {{element.offerCode}} 
+         </td>
+      </ng-container>
+
+      <ng-container matColumnDef="serviceCode">
+         <th mat-header-cell *matHeaderCellDef> Service Code </th>
+         <td mat-cell *matCellDef="let element"> {{element.serviceCode}} </td>
+      </ng-container>
+
+      <ng-container matColumnDef="seats">
+         <th mat-header-cell *matHeaderCellDef> Seats </th>
+         <td mat-cell *matCellDef="let element"> {{element.seats}} </td>
+      </ng-container>
+
+      <ng-container matColumnDef="price">
+         <th mat-header-cell *matHeaderCellDef> Price </th>
+         <td mat-cell *matCellDef="let element"> {{element.price|currency:'EUR'}} </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+   </table>
+      </div>
+</div>

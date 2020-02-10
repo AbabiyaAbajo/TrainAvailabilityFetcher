@@ -1,0 +1,34 @@
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+
+# compiled output
+/dist
+/tmp
+/out-tsc
+# Only exists if Bazel was run
+/bazel-out
+/__pycache__
+
+# dependencies
+/node_modules
+
+# profiling files
+chrome-profiler-events*.json
+speed-measure-plugin*.json
+
+# IDEs and editors
+/.idea
+/picoqueryvenv
+fetching_train_info/__pycache__/
+
+# IDE - VSCode
+
+
+# misc
+
+
+# System Files
+
+
+# Prevent deployment file
+picoqueryapi-cf.yaml
+.aws-sam/
